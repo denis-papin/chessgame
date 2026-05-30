@@ -103,9 +103,3 @@ A Rust module that is **part of the same Rust workspace** as `fisher-server`.
 * **Small, focused commits** that keep both modules in a buildable state.
 
 ---
-
-## 5. Related documents
-
-* [architecture.md](architecture.md) — system overview, data model, API surface.
-* [F0001 — start a game](../features/F0001-start-a-game/F0001.md) — first feature spec.
-* [IT-F0001](../features/F0001-start-a-game/IT-F0001.md) — its integration tests.
