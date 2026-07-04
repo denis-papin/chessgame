@@ -1,0 +1,20 @@
+[package]
+name = "api-tests"
+version = "0.1.0"
+edition = "2024"
+
+# This crate only groups the back-end integration tests (coding-rules.md §3).
+# It has no library/binary of its own.
+[lib]
+path = "src/lib.rs"
+
+# The api-tests drive the *running* fisher-server over HTTP (black-box); they
+# no longer link the server crate, so it is not a dependency.
+[dependencies]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }

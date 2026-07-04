@@ -87,68 +87,6 @@ docker run \
 
 ---
 
-## 3. Request flow — a single move
-
-```
-Player drags pawn e2 → e4
-        │
-        ▼
-[chessgame] events/ captures the move
-        │  POST /games/{uuid}/moves  { from: "e2", to: "e4" }
-        ▼
-[fisher-server] validates the move, updates position + move list + captures
-        │  asks the engine for the reply
-        ▼
-[Stockfish]  position ... / go  → bestmove e7e5
-        │
-        ▼
-[fisher-server] applies the engine move, returns the new global position
-        │  200 OK { position, moves, captured, turn }
-        ▼
-[chessgame] refreshes the board
-```
-
----
-
-## 4. Data model (proposed)
-
-The shapes the two sides agree on. Suggested as a starting contract.
-
-```jsonc
-// Game state returned by fisher-server
-{
-  "uuid": "5f1c…",            // current game id
-  "turn": "white",           // side to move
-  "position": "rnbqkbnr/…",  // FEN string, or an 8×8 piece grid
-  "moves": [                 // ordered history
-    { "ply": 1, "from": "e2", "to": "e4", "san": "e4" }
-  ],
-  "captured": {              // pieces removed from the board
-    "white": ["p", "n"],
-    "black": ["P"]
-  },
-  "status": "in_progress"    // in_progress | checkmate | stalemate | draw
-}
-```
-
----
-
-## 5. REST API surface (proposed)
-
-A first cut of the endpoints `fisher-server` would expose. Aligns with
-feature **F0001 — start a game**.
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/games` | Start a new game, returns a fresh `uuid` and the start position |
-| `GET` | `/games/{uuid}` | Fetch the full current game state |
-| `GET` | `/games/{uuid}/position` | Fetch just the global position (cheap board refresh) |
-| `POST` | `/games/{uuid}/moves` | Play a move; server replies and returns the new state |
-| `GET` | `/games/{uuid}/moves` | List the move history |
-| `GET` | `/health` | Liveness probe (also reports engine availability) |
-
----
-
 ## 6. Runtime & development
 
 | Service | URL | Start command |
@@ -186,5 +124,3 @@ Things worth deciding early:
 ## 8. Related documents
 
 * [coding-rules.md](coding-rules.md) — folder conventions and logging rules.
-* [F0001 — start a game](../features/F0001-start-a-game/F0001.md) — first feature spec.
-* [IT-F0001](../features/F0001-start-a-game/IT-F0001.md) — its integration tests.

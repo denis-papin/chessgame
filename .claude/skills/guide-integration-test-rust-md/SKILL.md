@@ -219,6 +219,7 @@ contract. The humanizer may rewrite *wording*, but it must not change
 - Keep "kept here for traceability" / "already verified by IT-F00x" notes.
 - Do **not** hard-wrap prose; preserve the soft-wrap convention from the style
   rules above.
+- Do not keep direct references to source files (such as ([`chessgame/src/main.ts`](../../../chessgame/src/main.ts))), it's dull. You can refer to routine names instead.
 
 In short: it tightens how each sentence reads, not what the spec asserts. If the
 only way to shorten something is to drop a fact, leave it as-is.
