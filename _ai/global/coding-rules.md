@@ -51,21 +51,8 @@ Structure:
 
 ### 2.1 Logging
 
-Logging is **mandatory**. Emit a `log info` (or appropriate level):
-
-* every time a service **starts** and **ends**;
-* every time a meaningful action is **completed**;
-* every time a meaningful action has **failed**;
-* every time a process is **routed onto an important path** (a significant branch).
-
-Guidelines:
-
-* Include the `uuid` of the current game in log lines so a game can be traced
-  end to end.
-* Use levels deliberately: `info` for the events above, `warn` for recoverable
-  problems, `error` for failures that abort an action.
-* Log facts, not secrets — never log full request bodies that could contain
-  sensitive data.
+Logging is **mandatory**. The conventions (levels, what to log, and the proof
+logs) live in [proof-logs.md](proof-logs.md).
 
 ### 2.2 Errors
 
