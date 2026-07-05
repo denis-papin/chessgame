@@ -1,14 +1,19 @@
 ---
 name: guide-integration-test-rust-md
-description: Write or fix the Markdown specification files for Rust integration tests. Use when the user wants to author, review, or correct an `integration_test_*.md` (or `unit_test_*.md`) spec under `_ai/<FEATURE>/`, or when they want the MD spec to match the conventions of an existing integration-test `.rs` file. Triggers on phrases like "write the integration test MD", "fix the IT spec", "document the integration tests for Fxxxx".
+description: Write or fix the Markdown specification files for Rust back-end integration tests. Use when the user wants to author, review, or correct an `integration_test_*.md` spec under `_ai/<FEATURE>/`, or when they want the MD spec to match the conventions of an existing integration-test `.rs` file. Triggers on phrases like "write the integration test MD", "fix the IT spec", "document the integration tests for Fxxxx". For front-end (TypeScript/Vitest) unit-test specs, use the sibling skill `guide-front-test-md` instead.
 ---
 
 # Integration-test Markdown Guide Lines specs
 
-This skill encodes the conventions for the Markdown files that **specify** Rust
-integration tests. These MD files live next to the feature design under
-`_ai/<FEATURE-ID>/` and act as the human-readable, traceable contract that the
-dedicated integration-test `.rs` file implements.
+This skill encodes the conventions for the Markdown files that **specify** the
+**back-end** Rust integration tests. These MD files live next to the feature
+design under `_ai/<FEATURE-ID>/` and act as the human-readable, traceable
+contract that the dedicated integration-test `.rs` file implements.
+
+For the **front-end** (TypeScript/Vitest) unit-test specs, use the sibling
+skill `guide-front-test-md` instead. The two share the same structure and style
+but describe different boundaries — the public REST API (back end, here) vs. the
+front module boundary (front).
 
 The MD is a **specification**, not a transcript. It is written *before or
 alongside* the `.rs` file, in black-box language, and every assertion it lists
@@ -38,9 +43,9 @@ spec; flag that the two must stay in lock-step.
 
 - Path: `_ai/<FEATURE-ID>/integration_test_<slug>.md`
   (e.g. `_ai/F0003-some-feature/integration_test_some_feature.md`).
-- Unit-test specs use `unit_test_<slug>.md` / `unit_tests_<slug>.md` in the
-  same folder — same structure, but the "System under test" is the internal
-  function, not the public API.
+- The "System under test" is the public REST API — front-end unit-test specs
+  (`unit_test_<slug>.md`) live in the same folder but are owned by the sibling
+  skill `guide-front-test-md`, whose boundary is the internal function.
 - The `<FEATURE-ID>` folder also holds the feature design (`F000X.md`). Keep
   the naming prefix consistent: feature `F0003` → spec id `IT-F0003`.
 
@@ -68,7 +73,7 @@ language: rust
 
 Rules:
 - `id` / `naming_prefix` = `IT-` + feature id.
-- `type`: `integration-test` (or `unit-test`).
+- `type`: `integration-test`.
 - `status`: starts at `draft`.
 - `target_stream`: the business flow under test (e.g. a named feature stream).
 - Use `related_fix:` for bug branches (`Bxxxx`/`Fxxxx` fixes), `related_feature:`
@@ -88,14 +93,27 @@ dash clause, the rule it proves. Example shape:
 
 ### 3. `# System under test`
 
-Name the **real** moving parts explicitly:
-- The server(s)/process(es) and the host/port actually used by the harness.
-- The client methods or entry points exercised, fully qualified
-  (module path + method names).
-- State the boundary plainly: **"No mock, no internal-state inspection — the
-  test only observes what the public interface returns."**
-- When a signature makes the cases reachable, quote it in a ```rust block and
-  add a wire-form table for the relevant arguments.
+Do **not** write this as one prose blob. Split it into short, labelled
+subsections — this reads much clearer than a single paragraph. Use the ones
+that apply, in this order:
+
+- `## The <N> API(s) under test` — one line on what is driven, then a
+  **table** of the routes. Columns: `Route | Handler → delegate | What the
+  tests drive | Cases`. Note any route used only as a fixture seam (e.g. a
+  `GET /start-game` that just mints a game) so it is clearly not itself under
+  test.
+- `## Harness` — the real server/process, the host/port actually used, how it is
+  overridden (env var), the client type, and how a `uuid`/game is obtained.
+- `## Boundary` — state it plainly: **"No mock, no internal-state inspection —
+  the test only observes what the public interface returns (status code,
+  headers, JSON body)."** When a request/response signature makes the cases
+  reachable, add a wire-form **table** of the relevant fields (`Field | Wire
+  form | Meaning`).
+- `## Seed positions` / fixtures (when applicable) — show each fixed input once
+  (e.g. an ASCII board), then have the test cases **reference it by number/name**
+  (**Position #1**, …) instead of repeating it.
+- `## Helpers` — a bullet per shared helper: its signature and what it does in
+  one line.
 
 ### 4. `# Test cases`
 
@@ -169,6 +187,14 @@ Report any drift explicitly to the user.
 
 ## Style rules (project-wide)
 
+- **Write no code in the spec.** This is a neutral, language-agnostic
+  specification document — no Rust, no function bodies, no type/struct
+  definitions, no `use` statements, no fenced ```rust blocks. Describe the routes,
+  requests, and expected outcomes in prose, tables, and language-neutral data (an
+  ASCII board, a `Field | Wire form | Meaning` table). You may name handlers,
+  routes, fields, and identifiers inline in `backticks`, but never paste an
+  implementation, a signature, or a fixture as Rust. The `.rs` file is the only
+  place code lives. (The ```yaml front-matter is metadata, not code, and stays.)
 - Write in **English**, in a precise, black-box, rule-traceable tone.
 - Do **not** hard-wrap prose. A Markdown sentence can run as a single long line
   without any CR/LF inside it — let the editor soft-wrap. Only use line breaks
@@ -212,8 +238,9 @@ contract. The humanizer may rewrite *wording*, but it must not change
 - Keep every required section and its order (the ```yaml front-matter, Coverage
   goal, System under test, Test cases, Test file, …). Never drop or merge a
   section.
-- Keep all tables, fenced ```yaml`/```rust blocks, backticked identifiers, and
-  relative links exactly as they are.
+- Keep all tables, the ```yaml front-matter, ASCII boards, backticked
+  identifiers, and relative links exactly as they are. Do not introduce any code
+  block (no ```rust) — the spec stays code-free.
 - Keep every Given / Input / When / Then item and every numbered "proves
   <rule>" clause — that traceability wording is the contract, not filler.
 - Keep "kept here for traceability" / "already verified by IT-F00x" notes.
