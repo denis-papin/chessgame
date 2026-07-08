@@ -24,7 +24,8 @@ What is asserted:
 - on a `valid` response the front hands the returned `overview` to the smart redraw and keeps both squares highlighted — proves **F-5**;
 - on an `illegal` response the front shows the reason and clears the selection and highlights — proves **F-6**;
 - `movePiece` posts the move, resolves `200` to a `valid` outcome and `422` to an `illegal` `{ reason }`, and throws on any other status — proves **F-7**;
-- the smart redraw patches only the squares whose piece changed and leaves every unchanged square's DOM node untouched — proves **F-5**.
+- the smart redraw patches only the squares whose piece changed and leaves every unchanged square's DOM node untouched — proves **F-5**;
+- a first click on a fresh source resets every square a previous move left highlighted, leaving only the new source coloured — proves **F-9**.
 
 The rules referenced above are defined in [F0002.md → Rules](F0002.md#rules).
 
@@ -37,7 +38,7 @@ The named front routines from [F0002.md → Flow & routines](F0002.md#flow--rout
 | Routine | What the tests drive | Cases |
 |---------|----------------------|-------|
 | `domain/pieces.ts` — `isWhitePiece(letter)` | Pure classifier: `true` for a non-empty uppercase piece letter (`P N B R Q K`), `false` for a lowercase (black) letter or `""`. Backs the `square1` front check (**F-1**). | TC-001 |
-| `events/selection.ts` — `initSelection(uuid)` / `onSquareClick(square)` | The click state machine: `initSelection` sets the active game `uuid` and clears any selection (the seam `onPageLoad` uses to retain the `uuid`, **F-8**); `onSquareClick` reads each clicked square's piece from the rendered DOM, classifies it with `isWhitePiece`, owns the `selected` highlight, and on the second click drives `movePiece`, then `applyValidMove` (valid) or `rejectMove` (illegal). | TC-002–007 |
+| `events/selection.ts` — `initSelection(uuid)` / `onSquareClick(square)` | The click state machine: `initSelection` sets the active game `uuid` and clears any selection (the seam `onPageLoad` uses to retain the `uuid`, **F-8**); `onSquareClick` reads each clicked square's piece from the rendered DOM, classifies it with `isWhitePiece`, owns the `selected` highlight, resets a prior move's highlights on a fresh source (**F-9**), and on the second click drives `movePiece`, then `applyValidMove` (valid) or `rejectMove` (illegal). | TC-002–007, TC-012 |
 | `infra/movePiece.ts` — `movePiece(req)` | The single network seam for moves (**F-7**): `POST /move-a-piece`, mapping `200` → a `valid` outcome and `422` → an `illegal` `{ reason }`, throwing on any other status. | TC-008–010 |
 | `events/applyValidMove.ts` — `applyValidMove(overview)` | The **smart redraw** (**F-5**): rebuild the model with `buildBoard(overview)` and patch **only** the squares whose piece differs from what is rendered, leaving unchanged squares and the `selected` highlights in place. | TC-006, TC-011 |
 | `events/rejectMove.ts` — `rejectMove(message)` | Write the message to the page's `#message` element and remove the `selected` highlights (**F-6**). | TC-007 |
@@ -259,6 +260,16 @@ Four `Overview` boards are reused across cases; each is shown once below and ref
   2. the `[data-piece]` nodes on `e1` and `e8` are the **same** element references captured before the redraw — proves **F-5** (only changed squares are patched; unchanged squares' DOM is left in place);
   3. `#board` still has exactly 64 `[data-square]` elements — proves the grid is never rebuilt (**F-5**, and F0001 **F-4** carried forward).
 
+## TC-UT-F0002-012 — a new source selection resets the previous move's highlights
+
+- **Given:** a jsdom `#board` rendered from STANDARD, `initSelection("u-1")`, and `infra.movePiece` spied. Two squares are pre-marked as if a previous move left them highlighted — `d2` as the old source and `d4` as the old target (each carrying the `selected` highlight, as rule **F-5** leaves them).
+- **Input:** `onSquareClick("e2")` — a first click on a fresh white source, with no `square1` held.
+- **When:** the state machine handles the first click on a new source.
+- **Then:**
+  1. neither `[data-square="d2"]` nor `[data-square="d4"]` carries `selected` — proves **F-9** (every square a previous move left highlighted is reset before the new source is coloured);
+  2. `[data-square="e2"]` carries `selected` and it is the only highlighted square — proves **F-9**/**F-1** (only the current selection is ever highlighted);
+  3. the `movePiece` spy was not called — proves a first click sends no request (**F-1**/**F-4**), kept here for traceability.
+
 # Running locally
 
 Vitest and jsdom are already configured (`vitest.config.ts` sets `environment: "jsdom"` and includes `src/tests/**/*.test.ts`). Run the suite from the front folder:
@@ -275,4 +286,4 @@ These tests need **no** running `fisher-server`: `isWhitePiece` and `applyValidM
 
 - File: [`chessgame/src/tests/unit_test_F0002.test.ts`](../../../chessgame/src/tests/unit_test_F0002.test.ts).
 - Suite: `describe('UT-F0002 — move a piece (front)', …)`.
-- TC ↔ test mapping (Vitest `test()` names, numbered by tens to mirror the IT convention): `TC-UT-F0002-001 ↔ t10_is_white_piece`, `-002 ↔ t20_first_click_selects_white`, `-003 ↔ t30_first_click_empty_or_black_refused`, `-004 ↔ t40_reclick_deselects`, `-005 ↔ t50_second_click_sends_move`, `-006 ↔ t60_valid_applies_and_keeps_highlights`, `-007 ↔ t70_illegal_shows_reason_and_clears`, `-008 ↔ t80_move_piece_valid_and_seam`, `-009 ↔ t90_move_piece_illegal_422`, `-010 ↔ t100_move_piece_throws_other_status`, `-011 ↔ t110_smart_redraw_patches_changed_only`. Each `test()` restates its Given/When/Then in a leading comment, and every `expect(...)` message ties the outcome to the rule it proves.
+- TC ↔ test mapping (Vitest `test()` names, numbered by tens to mirror the IT convention): `TC-UT-F0002-001 ↔ t10_is_white_piece`, `-002 ↔ t20_first_click_selects_white`, `-003 ↔ t30_first_click_empty_or_black_refused`, `-004 ↔ t40_reclick_deselects`, `-005 ↔ t50_second_click_sends_move`, `-006 ↔ t60_valid_applies_and_keeps_highlights`, `-007 ↔ t70_illegal_shows_reason_and_clears`, `-008 ↔ t80_move_piece_valid_and_seam`, `-009 ↔ t90_move_piece_illegal_422`, `-010 ↔ t100_move_piece_throws_other_status`, `-011 ↔ t110_smart_redraw_patches_changed_only`, `-012 ↔ t120_new_selection_resets_old_highlights`. Each `test()` restates its Given/When/Then in a leading comment, and every `expect(...)` message ties the outcome to the rule it proves.

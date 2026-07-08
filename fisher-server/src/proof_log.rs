@@ -18,6 +18,8 @@ use std::fmt;
 pub enum LogFeature {
     /// Feature F0001 — start a game.
     StartAGame,
+    /// Feature F0002 — move a piece.
+    MoveAPiece,
 }
 
 impl LogFeature {
@@ -25,6 +27,7 @@ impl LogFeature {
     pub const fn as_str(self) -> &'static str {
         match self {
             LogFeature::StartAGame => "START-A-GAME",
+            LogFeature::MoveAPiece => "MOVE-A-PIECE",
         }
     }
 }
