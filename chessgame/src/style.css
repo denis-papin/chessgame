@@ -15,6 +15,16 @@ body {
   padding: 1rem;
 }
 
+/* The mount node must span the body so the board+panel row can use the full
+   width; otherwise it shrink-to-fits and the panel wraps below the board. */
+#app {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
 .controls {
   display: flex;
   gap: 1rem;
@@ -28,9 +38,25 @@ body {
   align-items: center;
 }
 
+/* Board + side log panel sit in a centred row that wraps to a column on narrow
+   screens. `--board-size` is shared so the panel can match the board's height.
+   `align-items: flex-start` keeps a tall (scrolling) panel from stretching the
+   board — which would push the file labels off its bottom edge.
+   The `100vw - 22rem` term reserves room for the panel so the board never eats
+   the full width and pushes the panel below it. */
+.layout {
+  --board-size: min(90vh, 640px, calc(100vw - 22rem));
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 1040px;
+}
+
 /* The board stays a responsive square, capped by the smaller viewport side. */
 .board {
-  --board-size: min(90vw, 90vh, 640px);
   width: var(--board-size);
   display: grid;
   grid-template-columns: 1.5rem 1fr;
@@ -58,6 +84,11 @@ body {
 
 .square.light { background: var(--light); }
 .square.dark { background: var(--dark); }
+
+/* Selection highlights (F0002 F-1/F-4/F-5): source blue, target red. An inset
+   outline reads as a border without resizing the grid cell. */
+.square.selected-source { outline: 3px solid #1e6fff; outline-offset: -3px; }
+.square.selected-target { outline: 3px solid #e23636; outline-offset: -3px; }
 
 .piece {
   width: 88%;
@@ -91,4 +122,125 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ---- Side log panel (F0002): history of illegal-move messages, in red. ---- */
+.log-panel {
+  flex: 1 1 260px;
+  min-width: 240px;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  /* Match the board's height so the panel never stretches the row; the list
+     scrolls inside instead of growing the panel. border-box so the height
+     includes the panel's own padding and lines up with the board. */
+  box-sizing: border-box;
+  height: var(--board-size);
+  padding: 1rem;
+  border: 1px solid light-dark(#e3e3e6, #33343a);
+  border-radius: 12px;
+  background: light-dark(#ffffff, #1b1c20);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 8px 24px rgb(0 0 0 / 6%);
+}
+
+.log-panel__title {
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--label);
+  border-bottom: 1px solid light-dark(#eee, #33343a);
+}
+
+.log-list {
+  flex: 1;
+  min-height: 0; /* allow the list to shrink and scroll instead of growing the panel */
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.log-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  animation: log-entry-in 0.2s ease-out;
+}
+
+/* Error entries — red (illegal moves, real failures). */
+.log-entry--error {
+  color: light-dark(#c0392b, #ff6b6b);
+  background: light-dark(#fdecea, rgb(226 54 54 / 12%));
+  border-left: 3px solid #e23636;
+}
+
+/* Info entries — green (successful moves, front-side events). */
+.log-entry--info {
+  color: light-dark(#1e7e34, #4ade80);
+  background: light-dark(#eaf7ee, rgb(46 160 67 / 12%));
+  border-left: 3px solid #2ea043;
+}
+
+.log-entry__time {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-entry__text {
+  word-break: break-word;
+}
+
+.log-empty {
+  margin: 0;
+  color: var(--label);
+  opacity: 0.65;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+@keyframes log-entry-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Below this width the board + panel no longer fit side by side, so stack the
+   panel under a full-width board. */
+@media (max-width: 720px) {
+  .board {
+    --board-size: min(90vw, 90vh, 640px);
+  }
+  .log-panel {
+    max-width: none;
+    width: 100%;
+    height: auto;
+    max-height: 40vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .log-entry { animation: none; }
+}
+
+/* Visually hidden but kept for assistive tech (the #message live region). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

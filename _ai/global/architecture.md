@@ -12,13 +12,16 @@ front end, a Rust back end, and the Stockfish engine.
 
 ## 1. Overview
 
-```
-        ┌──────────────────┐   REST / JSON    ┌──────────────────┐   UCI / stdio   ┌──────────────────┐
-        │    chessgame     │ ───────────────► │   fisher-server  │ ──────────────► │    Stockfish     │
-        │   (front, TS)    │ ◄─────────────── │   (back, Rust)   │ ◄────────────── │     (engine)     │
-        │  Vite · :5173    │   board state    │  Axum · :7200    │   best move     │   external proc  │
-        └──────────────────┘                  └──────────────────┘                 └──────────────────┘
-              browser                            game authority                       move calculation
+```mermaid
+flowchart LR
+    A["<b>chessgame</b><br/>(front, TS)<br/>Vite · :5173<br/><i>browser</i>"]
+    B["<b>fisher-server</b><br/>(back, Rust)<br/>Axum · :7200<br/><i>game authority</i>"]
+    C["<b>Stockfish</b><br/>(engine)<br/>external proc<br/><i>move calculation</i>"]
+
+    A -->|REST / JSON| B
+    B -->|board state| A
+    B -->|UCI / stdio| C
+    C -->|best move| B
 ```
 
 | Layer | Module | Tech | Port | Responsibility |

@@ -16,7 +16,16 @@ app.innerHTML = `
     </label>
     <button id="rematch" type="button">Rematch</button>
   </header>
-  <main id="board" class="board"></main>
+  <div class="layout">
+    <main id="board" class="board"></main>
+    <aside id="log-panel" class="log-panel" aria-label="Log">
+      <h2 class="log-panel__title">Log</h2>
+      <ul id="log-list" class="log-list"></ul>
+      <p id="log-empty" class="log-empty">No messages yet.</p>
+    </aside>
+  </div>
+  <!-- Live region kept for assistive tech; the panel is the visible display. -->
+  <p id="message" class="message visually-hidden" role="status"></p>
 `
 
 // A new game is fetched on load and whenever the mode, the piece count, or the
