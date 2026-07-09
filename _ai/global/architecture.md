@@ -20,7 +20,7 @@ flowchart LR
 
     A -->|REST / JSON| B
     B -->|board state| A
-    B -->|UCI / stdio| C
+    B -->|REST / JSON| C
     C -->|best move| B
 ```
 
@@ -28,7 +28,7 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | Front | `chessgame` | TypeScript + Vite | `5173` | Render the board, capture user moves, call the back end |
 | Back | `fisher-server` | Rust + Axum | `7200` | Hold game state, validate moves, broker the engine |
-| Engine | Stockfish | UCI binary | _TBD_ | Compute the best reply for a given position |
+| Engine | Stockfish | REST (Docker image) | `4000` | Compute the best reply for a given position |
 
 ---
 
@@ -77,16 +77,42 @@ Code layout (per [coding-rules.md](coding-rules.md)):
 
 ### 2.3 Stockfish — engine
 
-An external process that speaks the **UCI** protocol over stdio. The
-`fisher-server` feeds it a position (FEN or move list), asks it to think, and
-reads back the best move. The front end never talks to it directly.
+We run Stockfish via the **`ghcr.io/samuraitruong/stockfish-docker:14.1`**
+Docker image. Rather than raw UCI over stdio, this image wraps the engine in a
+small **REST/HTTP** service. `fisher-server` calls it over HTTP with a FEN and
+reads back the best move as JSON; the front end never talks to it directly.
 
-To start the stockfish engine :
+To start the stockfish engine (host port `4000` → container `3000`):
+
+```bash
 docker run \
   --name stockfish \
-  -p 3000:3000 \
+  -p 4000:3000 \
   ghcr.io/samuraitruong/stockfish-docker:14.1 \
   stockfish
+```
+
+**REST contract**
+
+* `GET /` — health check, returns `{"ready":true,"stockfish_version":"14.1"}`.
+* `GET /bestmove?fen=<FEN>&depth=<N>` — best move for the given position.
+  `depth` is optional. Which side moves is encoded in the FEN (` b ` = Black,
+  ` w ` = White), so there is no separate colour parameter. The move comes back
+  in UCI long-algebraic notation (e.g. `c7c5`).
+
+Example — ask the engine to move Black after `1. e4`:
+
+```bash
+curl "http://localhost:4000/bestmove?fen=rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR%20b%20KQkq%20e4%200%201&depth=15"
+```
+
+```json
+{
+  "result": { "bestmove": "c7c5", "ponder": "g1f3" },
+  "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e4 0 1",
+  "info": { "stockfish_version": "14.1" }
+}
+```
 
 ---
 
@@ -96,7 +122,7 @@ docker run \
 | --- | --- | --- |
 | Front | http://localhost:5173/ | `cd chessgame && npm run dev` |
 | Back | http://localhost:7200/ | `cd fisher-server && cargo run` |
-| Engine | _TBD_ | launched/managed by `fisher-server` |
+| Engine | http://localhost:4000/ | `docker run --name stockfish -p 4000:3000 ghcr.io/samuraitruong/stockfish-docker:14.1 stockfish` |
 
 The front talks to the back across origins, so `fisher-server` must enable
 **CORS** for `http://localhost:5173` during development.

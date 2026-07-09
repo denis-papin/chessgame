@@ -90,6 +90,12 @@ body {
 .square.selected-source { outline: 3px solid #1e6fff; outline-offset: -3px; }
 .square.selected-target { outline: 3px solid #e23636; outline-offset: -3px; }
 
+/* Black-reply borders (F0003 F-3): the engine's last move — departure red,
+   arrival blue — so the player sees what Black played. An inset box-shadow
+   reads as a border and coexists with the selection outline above. */
+.square.last-move-from { box-shadow: inset 0 0 0 3px #e23636; }
+.square.last-move-to { box-shadow: inset 0 0 0 3px #1e6fff; }
+
 .piece {
   width: 88%;
   height: 88%;
