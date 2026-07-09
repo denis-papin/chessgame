@@ -20,6 +20,8 @@ pub enum LogFeature {
     StartAGame,
     /// Feature F0002 — move a piece.
     MoveAPiece,
+    /// Feature F0003 — play with Stockfish (the opponent reply).
+    PlayWithStockfish,
 }
 
 impl LogFeature {
@@ -28,6 +30,7 @@ impl LogFeature {
         match self {
             LogFeature::StartAGame => "START-A-GAME",
             LogFeature::MoveAPiece => "MOVE-A-PIECE",
+            LogFeature::PlayWithStockfish => "PLAY-WITH-STOCKFISH",
         }
     }
 }

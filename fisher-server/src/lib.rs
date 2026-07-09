@@ -4,6 +4,7 @@
 
 #[macro_use]
 pub mod proof_log;
+pub mod engine;
 pub mod game;
 pub mod moves;
 
@@ -20,6 +21,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 
+use engine::{OpponentOutcome, opponent_move};
 use game::piece::{self, Piece};
 use game::square::Square;
 use game::{Mode, Registry, overview::Overview, setup_board, start_game};
@@ -73,6 +75,7 @@ pub fn app() -> Router {
     Router::new()
         .route("/start-game", get(start_game_handler))
         .route("/move-a-piece", post(move_piece_handler))
+        .route("/opponent-move", post(opponent_move_handler))
         .route("/private/setup-board", post(setup_board_handler))
         .layer(cors)
         .with_state(AppState::default())
@@ -233,6 +236,53 @@ async fn move_piece_handler(State(state): State<AppState>, Json(req): Json<MoveR
             // Feature Exit (rule 2): 🏁, result=SUCCESS.
             log_info_f!(LogFeature::MoveAPiece.as_str(), &session, &tracking, uuid = %uuid, from = %from, to = %to, result = "SUCCESS", "🏁 move applied");
             (StatusCode::OK, Json(MoveResponse { from, to, piece, capture, overview })).into_response()
+        }
+    }
+}
+
+// ---- F0003 — play with Stockfish (POST /opponent-move) ----------------------
+
+/// opponent-move request body (rule B-1). `uuid` optional so a missing one is a
+/// `400` business rejection rather than an Axum deserialize error.
+#[derive(Deserialize)]
+struct OpponentMoveRequest {
+    uuid: Option<String>,
+}
+
+/// `POST /opponent-move` — validate `uuid`, delegate to `engine::opponent_move`,
+/// and map the outcome to the HTTP status: `200` reply/game-over, `400` malformed,
+/// `404` unknown game, `502` engine unavailable (rules B-1, B-9).
+async fn opponent_move_handler(State(state): State<AppState>, Json(req): Json<OpponentMoveRequest>) -> Response {
+    let (session, tracking) = follower_ids();
+    // Feature Entry (rule 1): 🚀 boundary marker.
+    log_info_f!(LogFeature::PlayWithStockfish.as_str(), &session, &tracking, "🚀 opponent-move requested");
+
+    // B-1 — uuid present.
+    let uuid = match req.uuid {
+        Some(u) => u,
+        None => {
+            log_warn_f!(LogFeature::PlayWithStockfish.as_str(), &session, &tracking, result = "FAILURE", error = "invalid opponent-move request", "🏁 opponent-move rejected");
+            return (StatusCode::BAD_REQUEST, Json(ErrorBody { error: "invalid opponent-move request".to_string() })).into_response();
+        }
+    };
+    // Invariant / Rule Check (rule 6): the request contract (B-1) holds — uuid present.
+    log_info_f!(LogFeature::PlayWithStockfish.as_str(), &session, &tracking, uuid = %uuid, request_valid = true, "request contract validated");
+
+    match opponent_move(&state.registry, &uuid, &session, &tracking).await {
+        OpponentOutcome::Ok(reply) => {
+            let status = reply.status.as_str();
+            // Feature Exit (rule 2): 🏁, result=SUCCESS.
+            log_info_f!(LogFeature::PlayWithStockfish.as_str(), &session, &tracking, uuid = %uuid, status = status, result = "SUCCESS", "🏁 opponent-move served");
+            (StatusCode::OK, Json(*reply)).into_response()
+        }
+        OpponentOutcome::UnknownGame => {
+            log_warn_f!(LogFeature::PlayWithStockfish.as_str(), &session, &tracking, uuid = %uuid, result = "FAILURE", error = "unknown game", "🏁 opponent-move rejected: unknown game");
+            (StatusCode::NOT_FOUND, Json(ErrorBody { error: "unknown game".to_string() })).into_response()
+        }
+        OpponentOutcome::EngineUnavailable => {
+            // Error / Exception (rule 8) + Feature Exit (rule 2): 502, 🏁, FAILURE.
+            log_error_f!(LogFeature::PlayWithStockfish.as_str(), &session, &tracking, uuid = %uuid, result = "FAILURE", error = "engine unavailable", "🏁 opponent-move failed: engine unavailable");
+            (StatusCode::BAD_GATEWAY, Json(ErrorBody { error: "engine unavailable".to_string() })).into_response()
         }
     }
 }

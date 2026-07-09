@@ -7,6 +7,7 @@ import * as infra from '../infra/movePiece'
 import type { MoveResponse } from '../infra/movePiece'
 import * as apply from './applyValidMove'
 import * as reject from './rejectMove'
+import * as opponent from './playOpponent'
 import { logInfo } from './logPanel'
 
 /** The active game `uuid`, retained from F0001's `GET /start-game` (rule F-8). */
@@ -29,11 +30,15 @@ export function initSelection(uuid: string): void {
  * spec/tests pin) plus a role class that colours it — blue source / red target. */
 const HIGHLIGHT_CLASSES = ['selected', 'selected-source', 'selected-target']
 
-/** Remove every highlight class from every square. */
+/** The black-reply borders left by the last opponent move (F0003 rule F-3). */
+const REPLY_BORDER_CLASSES = ['last-move-from', 'last-move-to']
+
+/** Remove every White-selection highlight and every black-reply border from every
+ * square (rules F-9 and F0003 F-3: a new White move clears the reply borders). */
 function clearHighlights(): void {
   document
     .querySelectorAll('[data-square]')
-    .forEach((el) => el.classList.remove(...HIGHLIGHT_CLASSES))
+    .forEach((el) => el.classList.remove(...HIGHLIGHT_CLASSES, ...REPLY_BORDER_CLASSES))
 }
 
 /** Highlight `square` as the `source` (blue) or `target` (red) of the move. */
@@ -98,6 +103,7 @@ export function onSquareClick(square: string): void {
       if (res.status === 'valid') {
         apply.applyValidMove(res.overview) // F-5: redraw from the returned board
         logInfo(describeMove(res)) // green: the move the API confirmed
+        opponent.playOpponent(activeUuid) // F0003 F-1: trigger Black's reply
       } else {
         reject.rejectMove(res.reason) // F-6: show the reason, clear the selection
       }

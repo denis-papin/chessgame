@@ -24,6 +24,21 @@ pub enum Kind {
     Pawn,
 }
 
+impl Kind {
+    /// Parse a UCI promotion letter (`q r b n`, case-insensitive) into a `Kind`
+    /// (F0003 rule B-6a). `None` for any other character — a promotion can only
+    /// name a queen, rook, bishop, or knight.
+    pub fn from_promo(c: char) -> Option<Kind> {
+        Some(match c.to_ascii_lowercase() {
+            'q' => Kind::Queen,
+            'r' => Kind::Rook,
+            'b' => Kind::Bishop,
+            'n' => Kind::Knight,
+            _ => return None,
+        })
+    }
+}
+
 /// A chess piece: its colour and kind fused into one variant. Uppercase letters
 /// are White, lowercase Black — the F0001 `Overview` cell vocabulary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +69,19 @@ impl Piece {
                 | Piece::WhiteKnight
                 | Piece::WhitePawn
         )
+    }
+
+    /// The black piece of a given `kind` — used for Black's promotion (F0003
+    /// rule B-6a), where the promoted piece is always Black.
+    pub const fn black(kind: Kind) -> Piece {
+        match kind {
+            Kind::King => Piece::BlackKing,
+            Kind::Queen => Piece::BlackQueen,
+            Kind::Rook => Piece::BlackRook,
+            Kind::Bishop => Piece::BlackBishop,
+            Kind::Knight => Piece::BlackKnight,
+            Kind::Pawn => Piece::BlackPawn,
+        }
     }
 
     /// The colour-independent kind (King, Queen, …).
