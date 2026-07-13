@@ -27,3 +27,95 @@ exactly what makes the project interesting.
 - Side panels show the move list, captured pieces, and whose turn it is.
 - All chess rules are enforced — castling, en passant, promotion, check,
   checkmate, stalemate, and draws.
+
+## ChessGame demo — install and run
+
+The blog series (see `static/blog/`) builds a small ChessGame app made of three
+services:
+
+- **chessgame** — the front end (Node + Vite).
+- **fisher-server** — the back end (Rust).
+- **Stockfish** — the chess engine, run as a Docker container.
+
+### Install the tools
+
+All commands below run inside WSL (Ubuntu) on Windows.
+
+**1. WSL**
+
+Open PowerShell as Administrator and run:
+
+```
+wsl --install
+```
+
+Reboot when asked, then open the Ubuntu app to finish setup.
+
+**2. Rust**
+
+Inside WSL:
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+cargo --version
+```
+
+**3. Node.js**
+
+Install Node via nvm, then check it:
+
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+# reopen the terminal, then:
+nvm install --lts
+node --version
+npm --version
+```
+
+**4. Vite**
+
+Vite ships as a dev dependency of the `chessgame` project, so `npm install`
+pulls it in. To also have the CLI available globally:
+
+```
+npm install -g vite
+```
+
+**5. Docker**
+
+Install Docker Desktop for Windows and enable WSL integration in
+Settings → Resources → WSL integration. Then, inside WSL:
+
+```
+docker --version
+```
+
+**6. The Stockfish container**
+
+Pull the engine image once:
+
+```
+docker pull ghcr.io/samuraitruong/stockfish-docker:14.1
+```
+
+### Run the services
+
+Start each service in its own terminal.
+
+```
+# 1. Stockfish engine (Docker) — listens on port 4000
+docker run \
+  --name stockfish \
+  -p 4000:3000 \
+  ghcr.io/samuraitruong/stockfish-docker:14.1 \
+  stockfish
+
+# 2. Back end (Rust) — from the fisher-server project
+cargo run
+
+# 3. Front end (Node + Vite) — from the chessgame project
+npm run dev
+```
+
+Then open the URL Vite prints (usually `http://localhost:5173`) to play.
