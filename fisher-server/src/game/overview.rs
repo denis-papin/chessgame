@@ -71,6 +71,11 @@ pub fn standard_overview() -> Overview {
     Overview { board, white: "both".to_string(), black: "both".to_string() }
 }
 
+/// How many times `random_overview` redraws before giving up. A check-free king
+/// square almost always exists on a <=32-piece board, so a draw succeeds on the
+/// first attempt in practice; the bound only guards a pathological layout.
+const MAX_RANDOM_ATTEMPTS: usize = 100;
+
 /// Build a random layout placing exactly `pieces` pieces of EACH colour at
 /// random positions, drawn from a realistic army (rules B-3..B-8, B-10, B-11):
 /// - exactly one king per colour (B-4),
@@ -79,17 +84,30 @@ pub fn standard_overview() -> Overview {
 /// - no castling rights (B-7),
 /// - per-colour material caps: <=1 queen, <=2 rooks, <=2 bishops, <=2 knights,
 ///   <=8 pawns; the caps sum to 16, so `pieces=16` forces the full army (B-10),
-/// - a bishop pair sits on opposite-coloured squares (B-11).
+/// - a bishop pair sits on opposite-coloured squares (B-11),
+/// - both kings are placed LAST on a check-free square, so neither side starts
+///   in check (B-12).
+///
+/// Both non-king armies go down first, then each king, so a king's safety is
+/// judged against the complete enemy army. If a king finds no safe square the
+/// whole layout is redrawn (see [`MAX_RANDOM_ATTEMPTS`]).
 ///
 /// `pieces` is assumed already validated to be in `2..=16` by the caller.
 pub fn random_overview(pieces: u8) -> Overview {
-    let mut board: Vec<Vec<Cell>> = vec![vec![None; 8]; 8];
     let mut rng = rand::thread_rng();
 
-    place_army(&mut board, &mut rng, true, pieces); // white
-    place_army(&mut board, &mut rng, false, pieces); // black
+    for _ in 0..MAX_RANDOM_ATTEMPTS {
+        let mut board: Vec<Vec<Cell>> = vec![vec![None; 8]; 8];
+        place_army(&mut board, &mut rng, true, pieces); // white army, no king yet
+        place_army(&mut board, &mut rng, false, pieces); // black army, no king yet
 
-    Overview { board, white: "none".to_string(), black: "none".to_string() }
+        // Kings last, each on a square the enemy does not attack (B-12).
+        if place_king_safe(&mut board, &mut rng, true) && place_king_safe(&mut board, &mut rng, false) {
+            return Overview { board, white: "none".to_string(), black: "none".to_string() };
+        }
+    }
+
+    panic!("no check-free king placement after {MAX_RANDOM_ATTEMPTS} attempts (B-12)");
 }
 
 /// A board cell is dark when `(row + col)` is odd, so `board[7][0]` (`a1`) is
@@ -113,18 +131,16 @@ fn non_king_pool(white: bool) -> Vec<Piece> {
     pool
 }
 
-/// Place one colour's `pieces` (king + a capped, randomly-drawn army) onto empty
-/// squares. The composition respects the per-type caps (B-10) and a bishop pair
-/// is split across square colours (B-11).
+/// Place one colour's `pieces - 1` non-king pieces (a capped, randomly-drawn
+/// army) onto empty squares. The composition respects the per-type caps (B-10)
+/// and a bishop pair is split across square colours (B-11). The colour's one king
+/// is placed separately and last by [`place_king_safe`], so the whole enemy army
+/// is on the board when its safety is judged (B-4, B-12).
 fn place_army(board: &mut [Vec<Cell>], rng: &mut impl Rng, white: bool, pieces: u8) {
     use Piece::*;
-    let king = if white { WhiteKing } else { BlackKing };
     let bishop = if white { WhiteBishop } else { BlackBishop };
     let pawn = if white { WhitePawn } else { BlackPawn };
     let forbid_pawn_row = if white { 0 } else { 7 }; // own pawn never on its far rank (B-6)
-
-    // King first; it may sit anywhere.
-    place_on(board, rng, king, |_, _| true);
 
     // Draw (pieces - 1) non-king pieces by shuffling the capped pool and taking
     // the front slice: this can never exceed a cap, and `pieces=16` takes all 15.
@@ -153,6 +169,30 @@ fn place_army(board: &mut [Vec<Cell>], rng: &mut impl Rng, white: bool, pieces: 
             place_on(board, rng, t, |_, _| true);
         }
     }
+}
+
+/// Place the colour's one king (B-4) last, on a random empty square where it is
+/// not in check (B-12). Reuses [`crate::moves::is_in_check`] as the safety oracle:
+/// each empty candidate is tried by placing the king there and keeping it only if
+/// the colour is not attacked. Returns `false` when no empty square is safe, so
+/// `random_overview` can redraw the whole layout.
+fn place_king_safe(board: &mut [Vec<Cell>], rng: &mut impl Rng, white: bool) -> bool {
+    let king = if white { Piece::WhiteKing } else { Piece::BlackKing };
+
+    let mut candidates: Vec<(usize, usize)> = (0..8)
+        .flat_map(|r| (0..8).map(move |c| (r, c)))
+        .filter(|&(r, c)| board[r][c].is_none())
+        .collect();
+    candidates.shuffle(rng);
+
+    for (r, c) in candidates {
+        board[r][c] = Some(king);
+        if !crate::moves::is_in_check(&*board, white) {
+            return true; // safe — leave the king here
+        }
+        board[r][c] = None; // attacked — undo and try the next empty square
+    }
+    false
 }
 
 /// Place `piece` on a uniformly-random empty cell that satisfies `allowed`. With

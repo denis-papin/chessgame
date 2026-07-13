@@ -109,6 +109,99 @@ fn occupied(ov: &Overview) -> Vec<(usize, usize)> {
     v
 }
 
+/// Whether the given colour's king is attacked by an opposing piece, computed
+/// purely from the returned board — no server routine is consulted. Replays the
+/// standard attack geometry: `board[0]` is rank 8, so a white pawn attacks toward
+/// lower row indices. Used to check B-12 (a random layout leaves neither king in
+/// check).
+fn king_in_check(ov: &Overview, white: bool) -> bool {
+    let board = &ov.board;
+    let cell = |r: i32, c: i32| -> Option<&str> {
+        if (0..8).contains(&r) && (0..8).contains(&c) {
+            Some(board[r as usize][c as usize].as_str())
+        } else {
+            None
+        }
+    };
+
+    // Locate the king of the colour under test.
+    let king = if white { "K" } else { "k" };
+    let mut king_sq = None;
+    for (r, row) in board.iter().enumerate() {
+        for (c, occupant) in row.iter().enumerate() {
+            if occupant == king {
+                king_sq = Some((r as i32, c as i32));
+            }
+        }
+    }
+    let (kr, kc) = match king_sq {
+        Some(s) => s,
+        None => return false, // no king -> not in check (mirrors is_in_check)
+    };
+
+    // An enemy piece is the opposite case of the king under test.
+    let is_enemy = |s: &str| match s.chars().next() {
+        Some(ch) if white => ch.is_ascii_lowercase(),
+        Some(ch) => ch.is_ascii_uppercase(),
+        None => false,
+    };
+
+    // Knight attackers.
+    for (dr, dc) in [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)] {
+        if let Some(s) = cell(kr + dr, kc + dc) {
+            if is_enemy(s) && s.eq_ignore_ascii_case("n") {
+                return true;
+            }
+        }
+    }
+
+    // Adjacent enemy king.
+    for dr in -1..=1 {
+        for dc in -1..=1 {
+            if (dr, dc) == (0, 0) {
+                continue;
+            }
+            if let Some(s) = cell(kr + dr, kc + dc) {
+                if is_enemy(s) && s.eq_ignore_ascii_case("k") {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Pawn attackers: a white pawn sits one row *below* (higher index) the square
+    // it attacks, a black pawn one row *above* (lower index). So the enemy pawn
+    // that could attack the king sits on `pawn_row`, on either adjacent file.
+    let pawn_row = if white { kr - 1 } else { kr + 1 };
+    let enemy_pawn = if white { "p" } else { "P" };
+    for dc in [-1, 1] {
+        if cell(pawn_row, kc + dc) == Some(enemy_pawn) {
+            return true;
+        }
+    }
+
+    // Sliding attackers: rook/queen on ranks & files, bishop/queen on diagonals.
+    let straight = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+    let diagonal = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
+    for (dirs, sliders) in [(straight.as_slice(), ["r", "q"]), (diagonal.as_slice(), ["b", "q"])] {
+        for &(dr, dc) in dirs {
+            let (mut r, mut c) = (kr + dr, kc + dc);
+            while let Some(s) = cell(r, c) {
+                if !s.is_empty() {
+                    if is_enemy(s) && sliders.iter().any(|&k| s.eq_ignore_ascii_case(k)) {
+                        return true;
+                    }
+                    break; // first blocker ends the ray
+                }
+                r += dr;
+                c += dc;
+            }
+        }
+    }
+
+    false
+}
+
 type Err = Box<dyn std::error::Error>;
 
 // ---- TC-IT-F0001-001 --------------------------------------------------------
@@ -421,6 +514,31 @@ async fn t130_f0001_random_bishop_pair_opposite_colors() -> Result<(), Err> {
                 square_is_dark(c.0, c.1),
                 "{label} bishop pair on opposite square colours (B-11)"
             );
+        }
+    }
+    Ok(())
+}
+
+// ---- TC-IT-F0001-014 --------------------------------------------------------
+
+#[tokio::test]
+async fn t140_f0001_random_no_king_in_check() -> Result<(), Err> {
+    let base = base_url().await;
+    let client = reqwest::Client::new();
+
+    // A random start must never leave a king in check, at any count. pieces=16 is
+    // the densest board, where safe king squares are scarcest.
+    for query in ["mode=random&pieces=2", "mode=random&pieces=8", "mode=random&pieces=16"] {
+        for _ in 0..N {
+            let resp = client.get(format!("{base}/start-game?{query}")).send().await?;
+            assert_eq!(resp.status(), 200, "random returns 200 ({query})");
+            let body: StartGameResponse = resp.json().await?;
+            assert_eq!(body.mode, "random", "mode echoes random ({query})");
+            let ov = &body.overview;
+
+            // 2 & 3. neither king is attacked by an opposing piece (B-12).
+            assert!(!king_in_check(ov, true), "white king not in check ({query}, B-12)");
+            assert!(!king_in_check(ov, false), "black king not in check ({query}, B-12)");
         }
     }
     Ok(())
