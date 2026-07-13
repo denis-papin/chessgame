@@ -22,6 +22,8 @@ pub enum LogFeature {
     MoveAPiece,
     /// Feature F0003 — play with Stockfish (the opponent reply).
     PlayWithStockfish,
+    /// Feature F0004 — white pawn promotion (the apply-step substitution).
+    WhitePawnPromotion,
 }
 
 impl LogFeature {
@@ -31,6 +33,7 @@ impl LogFeature {
             LogFeature::StartAGame => "START-A-GAME",
             LogFeature::MoveAPiece => "MOVE-A-PIECE",
             LogFeature::PlayWithStockfish => "PLAY-WITH-STOCKFISH",
+            LogFeature::WhitePawnPromotion => "WHITE-PAWN-PROMOTION",
         }
     }
 }

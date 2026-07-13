@@ -370,6 +370,18 @@ pub fn move_piece(registry: &Registry, uuid: &str, from: Square, to: Square, ses
 
             // B-7 — apply the move to the stored board.
             game.overview.board = board_after(&board, from, to);
+
+            // B-2/B-3 (F0004) — a White pawn reaching rank 8 (row 0) is replaced by
+            // a White Queen. The apply step is the only change; validation is
+            // untouched. Mirrors the Black promotion in engine::apply_black_move.
+            if piece == Piece::WhitePawn && to.row == 0 {
+                game.overview.board[to.row][to.col] = Some(Piece::WhiteQueen);
+                // Business Decision (rule 4): the move routed onto the promotion
+                // branch — a White pawn reached rank 8 and became a Queen (F0004
+                // B-2/B-3). Emitted on the WHITE-PAWN-PROMOTION stream.
+                log_info_f!(LogFeature::WhitePawnPromotion.as_str(), session, tracking, uuid = %id, from = %from, to = %to, promoted_to = "Q", "white pawn promoted to queen");
+            }
+
             // Business Milestone (rule 7): the board position is transformed.
             log_info_f!(LogFeature::MoveAPiece.as_str(), session, tracking, uuid = %id, from = %from, to = %to, piece = %piece, "board updated");
 
@@ -611,5 +623,98 @@ mod tests {
         assert_eq!(validate_move(&b, sq("e2"), sq("d3")), Err(IllegalReason::KingInCheck));
         // The king may step off the file to a safe square (B-14).
         assert_eq!(validate_move(&b, sq("e1"), sq("f1")), Ok(None));
+    }
+
+    // ---- F0004: white pawn promotion at the apply step (rules B-2, B-3, B-6) --
+
+    /// Build a one-game registry from `board` and return it with the game `uuid`.
+    fn registry_with(board: Vec<Vec<Cell>>) -> (Registry, String) {
+        use std::collections::HashMap;
+        use std::sync::{Arc, Mutex};
+
+        use crate::game::{Game, Mode};
+
+        let uuid = Uuid::new_v4();
+        let overview = Overview { board, white: "both".to_string(), black: "both".to_string() };
+        let game = Game { uuid, mode: Mode::Standard, overview, taken: Vec::new() };
+        let mut map = HashMap::new();
+        map.insert(uuid, game);
+        (Arc::new(Mutex::new(map)), uuid.to_string())
+    }
+
+    #[test]
+    fn white_pawn_push_to_rank_8_promotes_to_queen() {
+        // White P e7, White K e1, Black r d8, Black k a8. Push e7→e8 promotes.
+        let b = board([
+            "k . . r . . . .",
+            ". . . . P . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . K . . .",
+        ]);
+        let (registry, uuid) = registry_with(b);
+        match move_piece(&registry, &uuid, sq("e7"), sq("e8"), "s", "t") {
+            MoveOutcome::Applied { piece, capture, overview } => {
+                // B-5 — the response echoes the mover pawn, not the queen.
+                assert_eq!(piece, Piece::WhitePawn, "piece stays WhitePawn (B-5)");
+                assert_eq!(capture, None, "a promotion push takes nothing (B-5)");
+                // B-2/B-3 — the destination cell (rank 8 = row 0, file e = col 4) is a queen.
+                assert_eq!(overview.board[0][4], Some(Piece::WhiteQueen), "e8 holds a White Queen (B-2/B-3)");
+                assert_eq!(overview.board[1][4], None, "the pawn left e7 (B-7)");
+            }
+            other => panic!("promotion push must be applied, got a non-Applied outcome: {}", label(&other)),
+        }
+    }
+
+    #[test]
+    fn white_pawn_diagonal_capture_to_rank_8_promotes_to_queen() {
+        // Same board: e7 pawn captures the black rook on d8 and promotes.
+        let b = board([
+            "k . . r . . . .",
+            ". . . . P . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . . . . .",
+            ". . . . K . . .",
+        ]);
+        let (registry, uuid) = registry_with(b);
+        match move_piece(&registry, &uuid, sq("e7"), sq("d8"), "s", "t") {
+            MoveOutcome::Applied { piece, capture, overview } => {
+                // B-5 — the mover is the pawn; the taken rook is still reported.
+                assert_eq!(piece, Piece::WhitePawn, "piece stays WhitePawn (B-5)");
+                assert_eq!(capture, Some(Piece::BlackRook), "the captured rook is reported (B-5)");
+                // B-3/B-4 — the capture square (d8 = row 0, col 3) now holds a queen.
+                assert_eq!(overview.board[0][3], Some(Piece::WhiteQueen), "d8 holds a White Queen (B-3/B-4)");
+            }
+            other => panic!("promotion capture must be applied, got: {}", label(&other)),
+        }
+    }
+
+    #[test]
+    fn white_pawn_move_off_rank_8_is_not_promoted() {
+        // Standard opening: d2→d4 is a normal push — no promotion off rank 8 (B-6).
+        let (registry, uuid) = registry_with(standard());
+        match move_piece(&registry, &uuid, sq("d2"), sq("d4"), "s", "t") {
+            MoveOutcome::Applied { piece, overview, .. } => {
+                assert_eq!(piece, Piece::WhitePawn, "piece stays WhitePawn");
+                // d4 = row 4, col 3 — still a pawn, never a queen (B-6).
+                assert_eq!(overview.board[4][3], Some(Piece::WhitePawn), "d4 holds a pawn, not a queen (B-6)");
+            }
+            other => panic!("normal pawn push must be applied, got: {}", label(&other)),
+        }
+    }
+
+    /// A short label for a `MoveOutcome`, for panic messages in the tests above.
+    fn label(outcome: &MoveOutcome) -> String {
+        match outcome {
+            MoveOutcome::Applied { .. } => "Applied".to_string(),
+            MoveOutcome::Illegal(r) => format!("Illegal({})", r.as_str()),
+            MoveOutcome::UnknownGame => "UnknownGame".to_string(),
+        }
     }
 }
